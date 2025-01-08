@@ -1,7 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = 8000;
-const HOST = "192.168.43.78";
 const ID_DICTIONARY =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
 const ID_LENGTH = 8;
@@ -13,7 +12,6 @@ type Message =
   | { type: "disconnect" };
 
 const chatServer = new WebSocketServer({
-  host: HOST,
   port: PORT,
 });
 
@@ -107,7 +105,7 @@ function handleDisconnect(socket: WebSocket): void {
 // }
 
 chatServer.on("listening", () => {
-  console.log(`WebSocket Server is listening at ws://${HOST}:${PORT}`);
+  console.log(`WebSocket Server is listening at PORT:${PORT}`);
 });
 
 chatServer.on("connection", (socket) => {
