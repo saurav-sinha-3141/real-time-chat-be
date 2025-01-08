@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 
-const PORT = 8000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
 const HOST = "0.0.0.0";
 const ID_DICTIONARY =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
