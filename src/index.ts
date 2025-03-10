@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
-const HOST = "0.0.0.0";
+const HOST = "127.0.0.1";
 const ID_DICTIONARY =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890";
 const ID_LENGTH = 8;
@@ -9,13 +9,7 @@ const ID_LENGTH = 8;
 type Message =
   | { type: "create"; payload: { username: string } }
   | { type: "join"; payload: { roomId: string; username: string } }
-  | { type: "chat"; payload: { roomId: string; message: string } }
-  | { type: "disconnect" };
-
-const chatServer = new WebSocketServer({
-  host: HOST,
-  port: PORT,
-});
+  | { type: "chat"; payload: { roomId: string; message: string } };
 
 let roomClients = new Map<string, Map<WebSocket, string>>();
 
@@ -37,15 +31,13 @@ function joinRoom(
   clientSocket: WebSocket,
   username: string
 ): boolean {
-  const validRoomId = /^[A-Za-z0-9]{8}$/;
-
-  if (!validRoomId.test(roomId) || !roomClients.has(roomId)) {
-    return false;
-  }
+  const validRoomId = new RegExp(`^[A-Za-z0-9]{${ID_LENGTH}}$`);
+  if (!validRoomId.test(roomId) || !roomClients.has(roomId)) return false;
 
   const room = roomClients.get(roomId);
-  room?.set(clientSocket, username);
+  if (!room) return false;
 
+  room.set(clientSocket, username);
   broadcastSystemMessage(roomId, `${username} joined the room`);
   return true;
 }
@@ -56,18 +48,17 @@ function broadcastMessage(
   senderSocket: WebSocket
 ): boolean {
   const room = roomClients.get(roomId);
-
-  if (!room || !room.has(senderSocket)) {
+  if (!room || !room.has(senderSocket) || message.trim().length === 0)
     return false;
-  }
 
   const senderUsername = room.get(senderSocket);
-
   room.forEach((_, client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(
         JSON.stringify({ type: "chat", sender: senderUsername, message })
       );
+    } else {
+      room.delete(client);
     }
   });
 
@@ -76,10 +67,13 @@ function broadcastMessage(
 
 function broadcastSystemMessage(roomId: string, message: string): void {
   const room = roomClients.get(roomId);
+  if (!room) return;
 
-  room?.forEach((_, client) => {
+  room.forEach((_, client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: "system", message }));
+    } else {
+      room.delete(client);
     }
   });
 }
@@ -100,31 +94,60 @@ function handleDisconnect(socket: WebSocket): void {
   });
 }
 
-// function validateParsed(message: any){
-//   if(!message.type){
+function validateMessage(message: any): message is Message {
+  if (!message || typeof message !== "object" || !message.type) return false;
 
-//   }
-// }
+  const validTypes = ["create", "join", "chat"];
+  if (!validTypes.includes(message.type)) return false;
+
+  if (
+    message.type === "create" &&
+    typeof message.payload?.username !== "string"
+  )
+    return false;
+  if (
+    message.type === "join" &&
+    (typeof message.payload?.roomId !== "string" ||
+      typeof message.payload?.username !== "string")
+  )
+    return false;
+  if (
+    message.type === "chat" &&
+    (typeof message.payload?.roomId !== "string" ||
+      typeof message.payload?.message !== "string")
+  )
+    return false;
+
+  return true;
+}
+
+const chatServer = new WebSocketServer({ host: HOST, port: PORT });
 
 chatServer.on("listening", () => {
-  console.log(`WebSocket Server is listening at ws://${HOST}:${PORT}`);
+  console.log(`WebSocket Server is running at ws://${HOST}:${PORT}`);
 });
 
 chatServer.on("connection", (socket) => {
   console.log(`[${new Date().toISOString()}] New connection established`);
 
+  socket.send(
+    JSON.stringify({ type: "system", message: "Connected to WebSocket Server" })
+  );
+
   socket.on("message", (message) => {
-    let parsedMessage: Message;
+    let parsedMessage: any;
 
     try {
       parsedMessage = JSON.parse(message.toString());
-    } catch (err) {
-      console.error("Invalid message format:", message.toString());
-      socket.send(JSON.stringify({ error: "Invalid message format" }));
+    } catch {
+      socket.send(JSON.stringify({ error: "Invalid JSON format" }));
       return;
     }
 
-    // validateParsed(parsedMessage)
+    if (!validateMessage(parsedMessage)) {
+      socket.send(JSON.stringify({ error: "Invalid message format" }));
+      return;
+    }
 
     switch (parsedMessage.type) {
       case "create":
@@ -142,7 +165,6 @@ chatServer.on("connection", (socket) => {
             JSON.stringify({ type: "joinedRoom", roomId: joinRoomId })
           );
         } else {
-          console.log(`Join failed for room ID: ${joinRoomId}`);
           socket.send(JSON.stringify({ error: "Invalid room ID" }));
         }
         break;
@@ -155,13 +177,7 @@ chatServer.on("connection", (socket) => {
         }
         break;
 
-      case "disconnect":
-        console.log("Client requested disconnection");
-        socket.close(1000, "User requested disconnection.");
-        break;
-
       default:
-        console.log("Unknown message type:", parsedMessage);
         socket.send(JSON.stringify({ error: "Unknown message type" }));
         break;
     }
@@ -180,4 +196,12 @@ chatServer.on("error", (err) => {
 
 chatServer.on("close", () => {
   console.log("WebSocket server closed");
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection:", reason);
 });
