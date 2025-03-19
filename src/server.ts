@@ -2,7 +2,7 @@ import { WebSocketServer } from "ws";
 import { handleConnection } from "./connectionHandler";
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = "0.0.0.0";
 
 const chatServer = new WebSocketServer({ host: HOST, port: PORT });
 
