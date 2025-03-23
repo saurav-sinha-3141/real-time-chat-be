@@ -9,7 +9,10 @@ export function createRoom(clientSocket: WebSocket, username: string): string {
   roomClients.set(roomId, new Map([[clientSocket, username]]));
 
   setTimeout(() => {
-    if (roomClients.has(roomId) && roomClients.get(roomId)?.size === 1) {
+    if (
+      (roomClients.has(roomId) && roomClients.get(roomId)?.size === 1) ||
+      roomClients.get(roomId)?.size === 0
+    ) {
       roomClients.delete(roomId);
       console.log(`Room ${roomId} deleted due to inactivity`);
     }
